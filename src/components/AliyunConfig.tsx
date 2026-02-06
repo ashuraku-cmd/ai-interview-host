@@ -11,6 +11,7 @@ import {
   Alert,
   Slider,
   Divider,
+  Tabs,
 } from 'antd'
 import { SaveOutlined, CheckCircleOutlined, InfoCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import {
@@ -21,6 +22,7 @@ import {
   speak,
 } from '../services/aliyunTTS'
 import { ALIYUN_CONFIG } from '../services/aliyunConfig'
+import { getStoredApiKey, saveApiKey } from '../services/qwenService'
 
 const { Title, Text } = Typography
 
@@ -33,9 +35,16 @@ interface ConfigForm {
   speechRate: number
 }
 
+interface QwenConfigForm {
+  apiKey: string
+}
+
 export default function AliyunConfig() {
   const [form] = Form.useForm<ConfigForm>()
+  const [qwenForm] = Form.useForm<QwenConfigForm>()
   const [isConfigured, setIsConfigured] = useState(false)
+  const [qwenApiKey, setQwenApiKey] = useState('')
+  const [activeTab, setActiveTab] = useState('voice')
 
   useEffect(() => {
     // 获取完整配置（合并文件和localStorage）
@@ -54,7 +63,24 @@ export default function AliyunConfig() {
         speechRate: config.speechRate || 1.2,
       })
     }
-  }, [form])
+
+    // 加载通义千问API Key
+    const storedQwenKey = getStoredApiKey()
+    if (storedQwenKey) {
+      setQwenApiKey(storedQwenKey)
+      qwenForm.setFieldsValue({ apiKey: '****************' })
+    }
+  }, [form, qwenForm])
+
+  // 保存通义千问配置
+  const handleSaveQwen = (values: QwenConfigForm) => {
+    const key = values.apiKey === '****************' ? qwenApiKey : values.apiKey
+    if (key) {
+      saveApiKey(key)
+      setQwenApiKey(key)
+      message.success('通义千问 API Key 已保存')
+    }
+  }
 
   const handleSave = (values: ConfigForm) => {
     // 获取原始配置
@@ -122,12 +148,44 @@ export default function AliyunConfig() {
     message.success('配置已清除，请重新输入')
   }
 
+  // 清除通义千问配置
+  const clearQwenConfig = () => {
+    localStorage.removeItem('qwen_api_key')
+    qwenForm.resetFields()
+    setQwenApiKey('')
+    message.success('通义千问配置已清除')
+  }
+
   return (
     <div>
-      <Title level={2}>语音配置</Title>
-      <Text type="secondary">配置AI主持人的语音参数</Text>
+      <Title level={2}>服务配置</Title>
+      <Text type="secondary">配置AI访谈所需的各项服务参数</Text>
 
       <Card style={{ marginTop: '24px', maxWidth: '700px' }}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'voice',
+              label: '语音合成',
+              children: <VoiceConfigTab />,
+            },
+            {
+              key: 'analysis',
+              label: '访谈分析',
+              children: <AnalysisConfigTab />,
+            },
+          ]}
+        />
+      </Card>
+    </div>
+  )
+
+  // 语音配置标签页
+  function VoiceConfigTab() {
+    return (
+      <>
         <Alert
           message="当前使用浏览器原生语音合成"
           description={
@@ -305,7 +363,89 @@ export default function AliyunConfig() {
           type="info"
           style={{ marginTop: '24px' }}
         />
-      </Card>
-    </div>
-  )
+      </>
+    )
+  }
+
+  // 分析配置标签页
+  function AnalysisConfigTab() {
+    return (
+      <>
+        <Alert
+          message="通义千问 API Key"
+          description="用于访谈记录的深度分析，提取关键主题和洞察"
+          type="info"
+          showIcon
+          style={{ marginBottom: '24px' }}
+        />
+
+        {qwenApiKey && (
+          <Alert
+            message="已配置"
+            description="通义千问 API Key 已保存"
+            type="success"
+            showIcon
+            icon={<CheckCircleOutlined />}
+            style={{ marginBottom: '24px' }}
+          />
+        )}
+
+        <Form
+          form={qwenForm}
+          layout="vertical"
+          onFinish={handleSaveQwen}
+        >
+          <Form.Item
+            name="apiKey"
+            label="API Key"
+            rules={[{ required: true, message: '请输入通义千问 API Key' }]}
+            help="在阿里云控制台获取通义千问的 API Key"
+          >
+            <Input.Password placeholder="请输入通义千问 API Key" />
+          </Form.Item>
+
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" icon={<SaveOutlined />}>
+                保存配置
+              </Button>
+              <Button
+                onClick={() => {
+                  qwenForm.resetFields()
+                }}
+              >
+                重置
+              </Button>
+              <Button danger icon={<DeleteOutlined />} onClick={clearQwenConfig}>
+                清除配置
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+
+        <Alert
+          message="如何获取通义千问 API Key？"
+          description={
+            <ol style={{ margin: 0, paddingLeft: '16px' }}>
+              <li>
+                访问{' '}
+                <a
+                  href="https://dashscope.console.aliyun.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  阿里云灵积模型服务控制台
+                </a>
+              </li>
+              <li>开通灵积模型服务</li>
+              <li>在 API Key 管理中创建新的 API Key</li>
+              <li>复制 API Key 到上方输入框</li>
+            </ol>
+          }
+          type="info"
+          style={{ marginTop: '24px' }}
+        />
+      </>
+    )
+  }
 }

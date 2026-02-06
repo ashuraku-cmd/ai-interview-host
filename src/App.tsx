@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Layout, Tabs, ConfigProvider, theme } from 'antd'
 import {
   FileTextOutlined,
@@ -12,6 +11,7 @@ import InterviewChat from './components/InterviewChat'
 import InterviewHistory from './components/InterviewHistory'
 import ReportAnalysis from './components/ReportAnalysis'
 import AliyunConfig from './components/AliyunConfig'
+import { useInterviewStore } from './store/interviewStore'
 import './App.css'
 
 const { Sider, Content } = Layout
@@ -51,7 +51,7 @@ const tabs = [
 ]
 
 function App() {
-  const [activeTab, setActiveTab] = useState('outline')
+  const { activeTab, setActiveTab } = useInterviewStore()
 
   // 获取当前组件
   const ActiveComponent = tabs.find(tab => tab.key === activeTab)?.component || OutlineManager

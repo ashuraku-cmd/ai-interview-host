@@ -40,14 +40,17 @@ export default function InterviewChat() {
     isRecording,
     isPlaying,
     isLoading,
+    sessionList,
     setInputMode,
     setIsRecording,
     setIsPlaying,
     createSession,
     sendMessage,
+    loadSession,
   } = useInterviewStore()
 
   const { currentOutline } = useOutlineStore()
+  const [isResuming, setIsResuming] = useState(false)
   const [inputText, setInputText] = useState('')
   const [recognizingText, setRecognizingText] = useState('')
   const [finalText, setFinalText] = useState('')
@@ -106,6 +109,22 @@ export default function InterviewChat() {
     } else {
       message.error('创建访谈失败')
     }
+  }
+
+  // 恢复最近的访谈
+  const handleResumeInterview = async (sessionId: string) => {
+    setIsResuming(true)
+    await loadSession(sessionId)
+    setIsResuming(false)
+    message.success('已恢复上次访谈')
+    // 注意：loadSession 会设置 currentSession，当 currentSession 存在时会自动显示对话界面
+  }
+
+  // 获取最近进行中的访谈
+  const getRecentOngoingSession = () => {
+    return sessionList
+      .filter(s => s.currentState === 'ongoing')
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]
   }
 
   // 发送文字消息
@@ -237,10 +256,13 @@ export default function InterviewChat() {
   // 渲染消息气泡
   const renderMessage = (msg: Message, index: number) => {
     const isAssistant = msg.role === 'assistant'
+    
+    // 调试：打印消息信息
+    console.log(`[RenderMessage] ${index}: role=${msg.role}, type=${msg.type}, content=${msg.content?.substring(0, 50)}...`)
 
     return (
       <div
-        key={msg.id}
+        key={msg.id || index}
         style={{
           display: 'flex',
           justifyContent: isAssistant ? 'flex-start' : 'flex-end',
@@ -257,29 +279,32 @@ export default function InterviewChat() {
             border: isAssistant ? '1px solid #dbeafe' : 'none',
           }}
         >
-          {isAssistant && msg.type && (
-            <Tag
-              size="small"
-              style={{
-                marginBottom: '8px',
-                fontSize: '11px',
-              }}
-            >
-              {msg.type === 'question' && '问题'}
-              {msg.type === 'follow_up' && '追问'}
-              {msg.type === 'transition' && '过渡'}
-              {msg.type === 'completed' && '结束'}
-            </Tag>
-          )}
+          {/* 显示角色标签 */}
+          <div style={{ marginBottom: '6px' }}>
+            {isAssistant ? (
+              <Tag size="small" style={{ fontSize: '11px' }}>
+                {msg.type === 'question' && '问题'}
+                {msg.type === 'follow_up' && '追问'}
+                {msg.type === 'transition' && '过渡'}
+                {msg.type === 'completed' && '结束'}
+                {!msg.type && 'AI主持人'}
+              </Tag>
+            ) : (
+              <Tag size="small" color="blue" style={{ fontSize: '11px' }}>
+                {msg.speaker || '被访者'}
+              </Tag>
+            )}
+          </div>
           <Text
             style={{
               color: isAssistant ? '#1f2937' : '#fff',
               fontSize: '14px',
               lineHeight: '1.6',
               display: 'block',
+              minHeight: '20px',
             }}
           >
-            {msg.content}
+            {msg.content || '(空消息)'}
           </Text>
           <Text
             type="secondary"
@@ -299,31 +324,75 @@ export default function InterviewChat() {
 
   // 如果没有当前会话，显示开始界面
   if (!currentSession) {
+    const recentSession = getRecentOngoingSession()
+    
     return (
       <div>
         <Title level={2}>AI访谈</Title>
         <Text type="secondary">与AI主持人进行深度访谈</Text>
 
-        <Card style={{ marginTop: '24px', textAlign: 'center', padding: '48px' }}>
-          <Empty
-            description={
-              currentOutline
-                ? '点击开始新访谈'
-                : '请先在大纲管理页面上传大纲'
-            }
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          >
-            <Button
-              type="primary"
-              size="large"
-              icon={<PlayCircleOutlined />}
-              onClick={handleStartInterview}
-              disabled={!currentOutline}
+        {recentSession ? (
+          // 有进行中的访谈，显示恢复选项
+          <Card style={{ marginTop: '24px', padding: '24px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <Badge status="processing" text="进行中" />
+              <Title level={4} style={{ marginTop: '16px', marginBottom: '8px' }}>
+                {recentSession.outlineTitle}
+              </Title>
+              <Text type="secondary">
+                上次访谈时间：{new Date(recentSession.updatedAt).toLocaleString()}
+              </Text>
+              <div style={{ marginTop: '8px' }}>
+                <Text type="secondary">
+                  已进行 {recentSession.messages.length} 轮对话
+                </Text>
+              </div>
+            </div>
+            
+            <Divider />
+            
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlayCircleOutlined />}
+                loading={isResuming}
+                onClick={() => handleResumeInterview(recentSession.id)}
+              >
+                继续上次访谈
+              </Button>
+              <Button
+                size="large"
+                onClick={handleStartInterview}
+                disabled={!currentOutline}
+              >
+                开始新访谈
+              </Button>
+            </div>
+          </Card>
+        ) : (
+          // 没有进行中的访谈
+          <Card style={{ marginTop: '24px', textAlign: 'center', padding: '48px' }}>
+            <Empty
+              description={
+                currentOutline
+                  ? '点击开始新访谈'
+                  : '请先在大纲管理页面上传大纲'
+              }
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
             >
-              开始访谈
-            </Button>
-          </Empty>
-        </Card>
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlayCircleOutlined />}
+                onClick={handleStartInterview}
+                disabled={!currentOutline}
+              >
+                开始访谈
+              </Button>
+            </Empty>
+          </Card>
+        )}
       </div>
     )
   }
@@ -371,7 +440,10 @@ export default function InterviewChat() {
         }}
         bodyStyle={{ padding: '16px' }}
       >
-        {currentSession.messages.map((msg, index) => renderMessage(msg, index))}
+        {(() => {
+          console.log('[InterviewChat] 渲染消息列表:', currentSession.messages.length, '条消息')
+          return currentSession.messages.map((msg, index) => renderMessage(msg, index))
+        })()}
         {isLoading && (
           <div style={{ textAlign: 'center', padding: '16px' }}>
             <Spin size="small" />

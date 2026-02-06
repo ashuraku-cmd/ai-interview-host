@@ -58,6 +58,8 @@ interface OutlineState {
   saveToBackend: () => Promise<boolean>
   // 从后端加载
   loadFromBackend: (outlineId: string) => Promise<void>
+  // 同步后端大纲列表
+  syncWithBackend: () => Promise<void>
 }
 
 export const useOutlineStore = create<OutlineState>()(
@@ -310,6 +312,42 @@ export const useOutlineStore = create<OutlineState>()(
           console.error('加载失败:', error)
         } finally {
           set({ isLoading: false })
+        }
+      },
+
+      // 从后端获取大纲列表并同步
+      syncWithBackend: async () => {
+        try {
+          const response = await fetch('http://localhost:8000/api/v1/outlines')
+          if (response.ok) {
+            const result = await response.json()
+            if (result.success && result.data) {
+              const backendOutlineIds = new Set(result.data.outlines?.map((o: any) => o.id) || [])
+              const { outlineList, currentOutline } = get()
+              
+              // 过滤掉后端不存在的大纲
+              const filteredList = outlineList.filter((o) => backendOutlineIds.has(o.id))
+              
+              // 如果当前大纲不在后端，也清空
+              const filteredCurrent = currentOutline && backendOutlineIds.has(currentOutline.id) 
+                ? currentOutline 
+                : null
+              
+              if (filteredList.length !== outlineList.length || filteredCurrent?.id !== currentOutline?.id) {
+                console.log('[OutlineStore] 同步后端大纲，过滤掉不存在的大纲')
+                set({ 
+                  outlineList: filteredList,
+                  currentOutline: filteredCurrent 
+                })
+              }
+            } else {
+              // 后端没有大纲，清空本地
+              console.log('[OutlineStore] 后端没有大纲，清空本地数据')
+              set({ outlineList: [], currentOutline: null })
+            }
+          }
+        } catch (error) {
+          console.error('同步大纲失败:', error)
         }
       },
     }),

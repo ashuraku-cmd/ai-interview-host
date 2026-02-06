@@ -50,6 +50,7 @@ export default function OutlineManager() {
     deleteModule,
     saveToBackend,
     loadFromBackend,
+    syncWithBackend,
   } = useOutlineStore()
 
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null)
@@ -57,6 +58,11 @@ export default function OutlineManager() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [addForm] = Form.useForm()
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null)
+
+  // 组件加载时同步后端大纲
+  useEffect(() => {
+    syncWithBackend()
+  }, [])
 
   // 上传配置
   const uploadProps: UploadProps = {
